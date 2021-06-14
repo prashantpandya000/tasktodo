@@ -39,7 +39,9 @@ INSTALLED_APPS = [
     'rest_framework',
     'django.contrib.staticfiles',
     'authentication',
-    'tasktodo'
+    'tasktodo',
+    'todos',
+    'drf_yasg'
 ]
 
 MIDDLEWARE = [

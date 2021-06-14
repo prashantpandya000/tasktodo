@@ -1,31 +1,24 @@
+from django.contrib import auth
+from django.contrib.contenttypes.models import ContentType
+from django.core.exceptions import PermissionDenied
+from django.core.mail import send_mail
 from django.db import models
-from django.utils.translation import gettext_lazy as _
+from django.db.models.manager import EmptyManager
 from django.utils import timezone
-from helpers.models import TrackingModel
-from django.conf import settings
-
-
+from django.utils.translation import gettext_lazy as _
 from django.contrib.auth.validators import UnicodeUsernameValidator
-from django.contrib.auth.models import (
-    PermissionsMixin, AbstractBaseUser, BaseUserManager)
+
+from django.contrib.auth.models import (PermissionsMixin,AbstractBaseUser, BaseUserManager)
+from django.conf import settings
+import jwt
+from datetime import datetime, timedelta
+from helpers.models import BaseModel
 
 
-MEMBERSHIP_CHOICES = (('Premium','pre'),('Free','free'))
-
-class Membership(models.Model):
-    slug = models.SlugField(null=True, blank=True)
-    membership_type = models.CharField(
-    choices=MEMBERSHIP_CHOICES, default='Free',max_length=30)
-    def __str__(self):
-       return self.membership_type
-
-class MyUserManager(BaseUserManager):
-    user = models.OneToOneField(settings.AUTH_USER_MODEL,related_name='user_membership', on_delete=models.CASCADE)
-    membership = models.ForeignKey(Membership, related_name='user_membership', on_delete=models.SET_NULL, null=True)
+class UserManager(BaseUserManager):
     use_in_migrations = True
 
-    
-    def _create_user(self, username, email, password, membership_type,**extra_fields):
+    def _create_user(self, username, email, password, **extra_fields):
         """
         Create and save a user with the given username, email, and password.
         """
@@ -35,15 +28,34 @@ class MyUserManager(BaseUserManager):
             raise ValueError('Email must be set')
         email = self.normalize_email(email)
         username = self.model.normalize_username(username)
-        membership_type=self.model(membership_type)
-        user = self.model(username=username, email=email, membership_type=membership_type,**extra_fields)
+        user = self.model(username=username, email=email, **extra_fields)
         user.set_password(password)
         user.save(using=self._db)
         return user
-        
+
+    def create_user(self, username, email, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', False)
+        extra_fields.setdefault('is_superuser', False)
+        return self._create_user(username, email, password, **extra_fields)
+
+    def create_superuser(self, username, email=None, password=None, **extra_fields):
+        extra_fields.setdefault('is_staff', True)
+        extra_fields.setdefault('is_superuser', True)
+
+        if extra_fields.get('is_staff') is not True:
+            raise ValueError('Superuser must have is_staff=True.')
+        if extra_fields.get('is_superuser') is not True:
+            raise ValueError('Superuser must have is_superuser=True.')
+
+        return self._create_user(username, email, password, **extra_fields)
 
 
-class User(AbstractBaseUser, PermissionsMixin, TrackingModel):
+class User(AbstractBaseUser, PermissionsMixin, BaseModel):
+    """
+    An abstract base class implementing a fully featured User model with
+    admin-compliant permissions.
+    Username and password are required. Other fields are optional.
+    """
     username_validator = UnicodeUsernameValidator()
 
     username = models.CharField(
@@ -81,17 +93,22 @@ class User(AbstractBaseUser, PermissionsMixin, TrackingModel):
 
     date_joined = models.DateTimeField(_('date joined'), default=timezone.now)
 
-    objects = MyUserManager()
+    objects = UserManager()
+
 
     EMAIL_FIELD = 'email'
     USERNAME_FIELD = 'email'
     REQUIRED_FIELDS = ['username']
 
 
-
     @property
     def token(self):
-        return ''
+        token = jwt.encode({
+            "username": self.username,
+            "email": self.email,
+            "exp": datetime.utcnow() + timedelta(hours=23)
+        }, settings.SECRET_KEY, algorithm='HS256')
+        return token
 
     '''@property
     def token(self):
