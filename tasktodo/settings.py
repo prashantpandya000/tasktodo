@@ -41,7 +41,9 @@ INSTALLED_APPS = [
     'authentication',
     'tasktodo',
     'todos',
-    'drf_yasg'
+    'drf_yasg',
+    'frontend',
+    'boards'
 ]
 
 MIDDLEWARE = [
