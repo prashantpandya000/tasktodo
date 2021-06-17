@@ -44,5 +44,5 @@ urlpatterns = [
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('todos/', include('todos.urls')),
-    path('', include('authentication.urls')),
+    path('', include('frontend.urls')),
 ]
